@@ -128,18 +128,43 @@ app.post('/api/signup', async (req, res) => {
 
 app.get('/api/posts', passport.authenticate('jwt'), async (req, res) => {
   let getPosts;
+
   if (req.query.own === '0') {
+    // Only own posts
     // eslint-disable-next-line no-underscore-dangle
     getPosts = await Post.find({ creator: req.user._id }).sort({
       date: -1,
     });
   } else if (req.query.own === '1') {
-    getPosts = await Post.find({ creator: { $in: req.user.friends } }).sort({
+    // Only Public Friends posts
+    getPosts = await Post.find({
+      creator: { $in: req.user.friends },
+      public: true,
+    }).sort({
       date: -1,
     });
-  } else {
+  } else if (req.query.own === '2') {
     getPosts = await Post.find({
-      $or: [{ creator: req.user._id }, { creator: { $in: req.user.friends } }],
+      // Own posts + Public Friends
+      $or: [
+        { creator: req.user._id },
+        { creator: { $in: req.user.friends }, public: true },
+      ],
+    }).sort({
+      date: -1,
+    });
+  } else if (req.query.own === '3') {
+    const getUsers = await User.find({ friends: req.user._id });
+    const test = getUsers.map((el) => el._id.toString());
+    const filteredFriends = req.user.friends.filter((el) => test.includes(el.toString()));
+
+    getPosts = await Post.find({
+      // Own posts + Public Friends + Private from mutuals
+      $or: [
+        { creator: req.user._id },
+        { creator: { $in: req.user.friends }, public: true },
+        { creator: { $in: filteredFriends }, public: false },
+      ],
     }).sort({
       date: -1,
     });
