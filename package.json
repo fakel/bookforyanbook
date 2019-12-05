@@ -1,0 +1,51 @@
+{
+  "name": "bookforyanbook",
+  "version": "0.1.0",
+  "description": "A book for YanBook",
+  "main": "index.js",
+  "scripts": {
+    "dev": "nodemon index.js",
+    "start": "node index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fakel/bookforyanbook.git"
+  },
+  "keywords": [
+    "node",
+    "express"
+  ],
+  "author": "Fares A. Akel C.",
+  "license": "AGPL-3.0-or-later",
+  "bugs": {
+    "url": "https://github.com/fakel/bookforyanbook/issues"
+  },
+  "homepage": "https://github.com/fakel/bookforyanbook#readme",
+  "dependencies": {
+    "@hapi/joi": "^16.1.8",
+    "await-to-js": "^2.1.1",
+    "bcrypt": "^3.0.7",
+    "body-parser": "^1.19.0",
+    "cookie-parser": "^1.4.4",
+    "dotenv": "^8.2.0",
+    "express": "^4.17.1",
+    "joi-objectid": "^3.0.1",
+    "jsonwebtoken": "^8.5.1",
+    "lodash": "^4.17.15",
+    "mongoose": "^5.7.13",
+    "passport": "^0.4.0",
+    "passport-jwt": "^4.0.0",
+    "passport-local": "^1.0.0"
+  },
+  "devDependencies": {
+    "eslint": "^6.7.2",
+    "eslint-config-airbnb-base": "^14.0.0",
+    "eslint-config-node": "^4.0.0",
+    "eslint-config-prettier": "^6.7.0",
+    "eslint-plugin-import": "^2.18.2",
+    "eslint-plugin-node": "^10.0.0",
+    "eslint-plugin-prettier": "^3.1.1",
+    "nodemon": "^2.0.1",
+    "prettier": "^1.19.1"
+  }
+}
