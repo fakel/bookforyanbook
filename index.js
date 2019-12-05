@@ -229,13 +229,14 @@ app.patch('/api/posts', passport.authenticate('jwt'), async (req, res) => {
 });
 
 app.post('/api/addFriend', passport.authenticate('jwt'), async (req, res) => {
-  if (req.user.email === req.body.email) {
+  const email = req.body.email.toLocaleLowerCase();
+  if (req.user.email === email) {
     return res.status(400).json({
       msg: 'You can be your own friend but not on the platform, sorry',
     });
   }
 
-  const newFriend = await User.findOne({ email: req.body.email });
+  const newFriend = await User.findOne({ email });
 
   if (!newFriend) {
     return res.status(400).json({ msg: 'That user does not exist' });
