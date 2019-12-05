@@ -58,6 +58,7 @@ passport.use(
       session: false,
     },
     async (email, password, done) => {
+      email = email.toLocaleLowerCase();
       const user = await User.findOne({ email });
 
       if (user) {
@@ -108,18 +109,20 @@ app.post('/api/signup', async (req, res) => {
   if (req.body === undefined) return res.status(400).json('Empty Request');
   if (error) return res.status(400).json(error.details[0].message);
 
+  const email = req.body.email.toLocaleLowerCase();
+
   // Check if this user already exisits
-  let user = await User.findOne({ email: req.body.email });
+  let user = await User.findOne({ email });
   if (user) return res.status(400).json('That user already exists!');
 
-  const { name, email, password } = req.body;
+  const { name, password } = req.body;
 
   user = new User({ name, email, password });
   const salt = await bcrypt.genSalt(10);
   user.password = await bcrypt.hash(user.password, salt);
 
   await user.save();
-  const token = jwt.sign({ data: req.body.email }, process.env.SECRET, {
+  const token = jwt.sign({ data: email }, process.env.SECRET, {
     expiresIn: 3600,
   });
 
