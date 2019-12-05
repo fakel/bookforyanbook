@@ -1,38 +1,33 @@
+/* eslint-disable no-console */
+/* eslint-disable consistent-return */
+/* eslint-disable no-param-reassign */
+/* eslint-disable no-underscore-dangle */
 const express = require('express');
 const bcrypt = require('bcrypt');
 const mongoose = require('mongoose');
 const passport = require('passport');
 const jwt = require('jsonwebtoken');
+const cors = require('cors');
 const LocalStrategy = require('passport-local').Strategy;
+const JwtStrategy = require('passport-jwt').Strategy;
+const { ExtractJwt } = require('passport-jwt');
 
 if (!process.env.SECRET) {
   console.error('FATAL ERROR: SECRET is not defined.');
   process.exit(1);
 }
-
-function jsonExtractor(req) {
-  let token = null;
-  if (req && req.body) {
-    token = req.body.token;
-  }
-  return token;
+if (!process.env.MONGO) {
+  console.error('FATAL ERROR: MONGO is not defined.');
+  process.exit(1);
 }
 
-//from http://www.passportjs.org/packages/passport-jwt/
-var JwtStrategy = require('passport-jwt').Strategy,
-  ExtractJwt = require('passport-jwt').ExtractJwt;
-var opts = {};
-opts.jwtFromRequest = ExtractJwt.fromExtractors([jsonExtractor]);
-opts.secretOrKey = process.env.SECRET;
-passport.use(
-  new JwtStrategy(opts, function(jwt_payload, done) {
-    User.findOne({ email: jwt_payload.data }, function(err, user) {
-      if (err) return done(err, false);
-      if (user) return done(null, user);
-      return done(null, false);
-    });
-  })
-);
+// function jsonExtractor(req) {
+//   let token = null;
+//   if (req && req.body) {
+//     token = req.body.token;
+//   }
+//   return token;
+// }
 
 const Joi = require('@hapi/joi');
 Joi.objectId = require('joi-objectid')(Joi);
@@ -42,16 +37,18 @@ const { Post } = require('./models/Post');
 
 const app = express();
 
+app.use(cors());
+
 app.use(express.json());
 
 mongoose.Promise = global.Promise;
 mongoose
-  .connect('mongodb://127.0.0.1', {
+  .connect(process.env.MONGO, {
     useNewUrlParser: true,
     useUnifiedTopology: true,
   })
   .then(() => console.log('Now connected to MongoDB!'))
-  .catch(err => console.error('Something went wrong', err));
+  .catch((err) => console.error('Something went wrong', err));
 
 passport.use(
   new LocalStrategy(
@@ -69,8 +66,8 @@ passport.use(
       }
 
       return done(null, false, { message: 'Invalid credentials.\n' });
-    }
-  )
+    },
+  ),
 );
 
 passport.serializeUser((user, done) => {
@@ -82,13 +79,27 @@ passport.deserializeUser(async (id, done) => {
   done(null, user);
 });
 
+// from http://www.passportjs.org/packages/passport-jwt/
+const opts = {};
+opts.jwtFromRequest = ExtractJwt.fromAuthHeaderAsBearerToken();
+opts.secretOrKey = process.env.SECRET;
+passport.use(
+  new JwtStrategy(opts, (jwtPayload, done) => {
+    User.findOne({ email: jwtPayload.data }, (err, user) => {
+      if (err) return done(err, false);
+      if (user) return done(null, user);
+      return done(null, false);
+    });
+  }),
+);
+
 app.use(passport.initialize());
 
 app.post('/api/login', passport.authenticate('local'), (req, res) => {
-  let token = jwt.sign({ data: req.user.email }, process.env.SECRET, {
+  const token = jwt.sign({ data: req.user.email }, process.env.SECRET, {
     expiresIn: 3600,
   });
-  res.json({ token: token });
+  res.json({ token, user: req.user.name, id: req.user._id });
 });
 
 app.post('/api/signup', async (req, res) => {
@@ -112,60 +123,104 @@ app.post('/api/signup', async (req, res) => {
     expiresIn: 3600,
   });
 
-  res.json({ token });
+  return res.json({ token, user: user.name, id: user._id });
 });
 
 app.get('/api/posts', passport.authenticate('jwt'), async (req, res) => {
   let getPosts;
-
-  if (req.body.own == true) {
-    getPosts = await Post.find({ author: req.user._id });
+  if (req.query.own === '0') {
+    // eslint-disable-next-line no-underscore-dangle
+    getPosts = await Post.find({ creator: req.user._id }).sort({
+      date: -1,
+    });
+  } else if (req.query.own === '1') {
+    getPosts = await Post.find({ creator: { $in: req.user.friends } }).sort({
+      date: -1,
+    });
   } else {
-    getPosts = await Post.find({ author: { $in: req.user.friends } });
+    getPosts = await Post.find({
+      $or: [{ creator: req.user._id }, { creator: { $in: req.user.friends } }],
+    }).sort({
+      date: -1,
+    });
   }
 
   res.json(getPosts);
 });
 
 app.post('/api/posts', passport.authenticate('jwt'), async (req, res) => {
-  let newPost = new Post({
-    author: req.user._id,
+  const newPost = new Post({
+    author: req.user.name,
+    creator: req.user._id,
     slug: req.body.post,
     date: Date.now(),
+    public: req.body.public,
   });
 
   newPost
     .save()
-    .then(result => {
+    .then((result) => res.json(result))
+    .catch((err) => res.status(400).json(err));
+});
+
+app.delete('/api/posts', passport.authenticate('jwt'), async (req, res) => {
+  const checkPost = await Post.findOne({ _id: req.query.id });
+
+  if (!checkPost) {
+    return res.status(400).json({ msg: 'Post does not exist' });
+  }
+
+  if (checkPost.creator.toString() !== req.user._id.toString()) {
+    return res.status(400).json({ msg: 'Not your post' });
+  }
+  // eslint-disable-next-line no-underscore-dangle
+  Post.deleteOne({ creator: req.user._id, _id: req.query.id })
+    .then((result) => res.json(result))
+    .catch((err) => res.status(400).json(err));
+});
+
+app.patch('/api/posts', passport.authenticate('jwt'), async (req, res) => {
+  const checkPost = await Post.findOne({ _id: req.body.id });
+
+  if (!checkPost) {
+    return res.status(400).json({ msg: 'Post does not exist' });
+  }
+
+  if (checkPost.creator.toString() !== req.user._id.toString()) {
+    return res.status(400).json({ msg: 'Not your post' });
+  }
+  // eslint-disable-next-line no-underscore-dangle
+  Post.findOne({ creator: req.user._id, _id: req.body.id })
+    .then(async (result) => {
+      result.slug = req.body.slug;
+      result.date = Date.now();
+      await result.save();
       return res.json(result);
     })
-    .catch(err => {
-      return res.status(400).json(err);
-    });
+    .catch((err) => res.status(400).json(err));
 });
 
 app.post('/api/addFriend', passport.authenticate('jwt'), async (req, res) => {
-  if (req.user.email == req.body.email)
+  if (req.user.email === req.body.email) {
     return res.status(400).json({
       msg: 'You can be your own friend but not on the platform, sorry',
     });
+  }
 
-  let newFriend = await User.findOne({ email: req.body.email });
+  const newFriend = await User.findOne({ email: req.body.email });
 
-  if (!newFriend)
+  if (!newFriend) {
     return res.status(400).json({ msg: 'That user does not exist' });
-  if (req.user.friends.includes(newFriend._id))
+  }
+  if (req.user.friends.includes(newFriend._id)) {
     return res.status(400).json({ msg: 'Already a friend' });
+  }
 
   req.user.friends.push(newFriend._id);
   req.user
     .save()
-    .then(result => {
-      return res.json(result);
-    })
-    .catch(err => {
-      return res.status(400).json(err);
-    });
+    .then((result) => res.json(result))
+    .catch((err) => res.status(400).json(err));
 });
 
 const port = process.env.PORT || 4000;

@@ -1,9 +1,19 @@
 const Joi = require('@hapi/joi');
 const mongoose = require('mongoose');
-const ObjectId = mongoose.Schema.ObjectId;
+
+const { ObjectId } = mongoose.Schema;
 
 const BookPost = new mongoose.Schema({
-  author: ObjectId,
+  author: {
+    type: String,
+    required: true,
+    minlength: 5,
+    maxlength: 50,
+  },
+  creator: {
+    type: ObjectId,
+    required: true,
+  },
   slug: {
     type: String,
     lowercase: true,
@@ -13,6 +23,11 @@ const BookPost = new mongoose.Schema({
     type: Date,
     required: true,
     default: Date.now(),
+  },
+  public: {
+    type: Boolean,
+    required: true,
+    default: true,
   },
 });
 
